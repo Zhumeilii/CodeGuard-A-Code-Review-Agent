@@ -1,0 +1,138 @@
+domain: payment
+description: 支付审核规范 - 覆盖交易安全、金额处理、对账、退款、风控等支付核心流程
+clauses:
+  - id: PAY-001
+    title: 金额使用整数存储
+    content: |
+      所有金额字段必须使用整数（分）或 Decimal 类型存储和计算。
+      禁止使用 float/double 处理金额（浮点精度丢失会导致资金差异）。
+      违反示例：total = price * 0.95
+      正确做法：total = Decimal(price) * Decimal("0.95") 或使用分为单位的整数运算。
+    severity: critical
+    tags: [money, decimal, float, precision, amount]
+
+  - id: PAY-002
+    title: 交易幂等性
+    content: |
+      所有支付相关接口必须支持幂等性。使用唯一的业务订单号（out_trade_no）作为幂等键。
+      重复请求应返回相同结果而非重复扣款。
+      幂等键应在数据库层面通过唯一索引保证。
+    severity: critical
+    tags: [idempotent, duplicate, order-id, unique-key]
+
+  - id: PAY-003
+    title: 支付回调验签
+    content: |
+      接收第三方支付平台（支付宝、微信支付、Stripe）的回调通知时，必须验证签名。
+      禁止仅依赖回调 URL 的隐蔽性作为安全保障。
+      验签失败的回调必须拒绝处理并记录告警日志。
+    severity: critical
+    tags: [callback, signature, webhook, verify]
+
+  - id: PAY-004
+    title: 金额一致性校验
+    content: |
+      支付完成后必须校验实际支付金额与订单金额是否一致。
+      禁止仅依赖支付状态（success/fail）而忽略金额校验。
+      金额不一致时应标记异常并触发人工审核流程。
+    severity: critical
+    tags: [amount-verify, consistency, order-amount, mismatch]
+
+  - id: PAY-005
+    title: 退款金额上限
+    content: |
+      单笔退款金额不得超过原订单实付金额。
+      累计退款金额不得超过原订单实付金额。
+      退款接口必须校验退款总额，防止超额退款。
+    severity: critical
+    tags: [refund, amount-limit, over-refund]
+
+  - id: PAY-006
+    title: 支付超时处理
+    content: |
+      支付订单必须设置超时时间（推荐 15-30 分钟）。
+      超时未支付的订单应自动关闭并释放库存/资源。
+      关闭订单时需同步调用支付平台的关单接口。
+    severity: high
+    tags: [timeout, order-close, inventory, expire]
+
+  - id: PAY-007
+    title: 对账机制
+    content: |
+      每日必须与支付平台进行对账，核对交易笔数和金额。
+      对账差异必须在 T+1 内处理完毕。
+      对账系统应独立于交易系统，防止同源错误。
+    severity: high
+    tags: [reconciliation, daily-check, settlement]
+
+  - id: PAY-008
+    title: 支付日志完整性
+    content: |
+      支付全流程（创建订单、发起支付、回调处理、退款）必须记录完整日志。
+      日志需包含：订单号、金额、时间戳、操作人、请求/响应摘要。
+      支付日志保留期限不低于 3 年（满足审计要求）。
+    severity: high
+    tags: [audit-log, payment-log, traceability]
+
+  - id: PAY-009
+    title: 并发支付防护
+    content: |
+      同一订单禁止并发发起多次支付请求。
+      使用分布式锁或数据库行锁保证同一订单同一时刻只有一个支付流程在执行。
+      支付状态变更必须使用乐观锁或 CAS 操作。
+    severity: high
+    tags: [concurrency, distributed-lock, race-condition, cas]
+
+  - id: PAY-010
+    title: 敏感支付信息保护
+    content: |
+      信用卡号、CVV、银行卡密码禁止在服务端存储。
+      如需存储卡号用于展示，只保留前6后4位，中间用 * 替代。
+      支付页面必须使用支付平台提供的安全控件或 iframe，禁止自行采集卡信息。
+    severity: critical
+    tags: [pci-dss, card-number, cvv, sensitive-data]
+
+  - id: PAY-011
+    title: 风控规则引擎
+    content: |
+      支付系统必须接入风控规则引擎，对异常交易进行拦截。
+      风控维度包括：单笔金额阈值、单日累计金额、交易频率、设备指纹、地理位置异常。
+      触发风控规则的交易应进入人工审核队列而非直接拒绝。
+    severity: high
+    tags: [risk-control, fraud, threshold, device-fingerprint]
+
+  - id: PAY-012
+    title: 多币种处理
+    content: |
+      涉及多币种的系统必须明确记录币种代码（ISO 4217）。
+      汇率转换必须使用实时汇率接口，禁止硬编码汇率。
+      金额展示必须附带币种标识，防止用户混淆。
+    severity: medium
+    tags: [currency, exchange-rate, iso-4217, multi-currency]
+
+  - id: PAY-013
+    title: 分账逻辑审计
+    content: |
+      分账比例和金额必须在订单创建时确定并记录。
+      分账总额不得超过订单实付金额。
+      分账变更需要审批流程，禁止代码层面直接修改分账规则。
+    severity: high
+    tags: [split-payment, profit-sharing, audit]
+
+  - id: PAY-014
+    title: 测试环境隔离
+    content: |
+      支付测试必须使用沙箱环境，禁止在生产支付通道上进行测试。
+      测试订单号必须有明确标识前缀，防止与生产订单混淆。
+      沙箱环境的密钥和生产环境必须完全隔离。
+    severity: high
+    tags: [sandbox, test-isolation, environment]
+
+  - id: PAY-015
+    title: 掉单处理机制
+    content: |
+      支付系统必须实现主动查询机制，定时轮询未确认的支付订单状态。
+      用户支付成功但回调未到达时，查询机制应能补偿完成订单状态更新。
+      掉单补偿应有最大重试次数和告警机制。
+    severity: high
+    tags: [lost-order, polling, compensation, retry]

@@ -1,0 +1,49 @@
+# =============================================================================
+# Code Review Agent - User Message 模板
+#
+# 这些模板用于构建发送给 LLM 的 user message，根据审查模式选择不同模板。
+# 支持 Jinja2 变量：{{ file_info }}, {{ language }}, {{ pr_info }}, {{ code }},
+#                   {{ repo_info }}, {{ policy_info }}
+# =============================================================================
+
+[diff_review]
+template = """{{ file_info }}审查模式: PR diff
+语言: {{ language }}
+{{ pr_info }}
+
+审查范围:
+- 只审查 diff 中新增或修改的代码行带来的问题。
+- 不要报告未变更上下文中的既有问题，除非本次改动使该问题可触发或更严重。
+- 优先输出会影响正确性、安全性、性能、可维护性或测试可靠性的具体问题。
+- 每个 finding 必须尽量返回 existing_code：从 diff 新增/修改后的代码中逐字复制、用于定位该问题的最小连续代码片段；不要包含删除行。
+- line 只是辅助字段；无法确定行号时使用 null，系统会优先用 existing_code 解析真实行号。
+
+PR Diff:
+```diff
+{{ code }}
+```
+{{ repo_info }}{{ policy_info }}"""
+
+[code_review]
+template = """{{ file_info }}语言: {{ language }}
+
+代码:
+```{{ language }}
+{{ code }}
+```
+{{ repo_info }}{{ policy_info }}"""
+
+[policy_review]
+template = """{{ file_info }}语言: {{ language }}
+
+## 待审查代码
+
+```{{ language }}
+{{ code }}
+```
+
+## 企业规范条款（请逐条判断代码是否违反）
+
+{{ clauses_text }}
+
+请严格按照 JSON 格式输出审查结果。只报告确实违反的条款。"""

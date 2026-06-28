@@ -1,0 +1,167 @@
+domain: security
+description: 安全基线规范 - 覆盖注入防护、认证授权、数据保护、加密通信等核心安全要求
+clauses:
+  - id: SEC-001
+    title: SQL 注入防护
+    content: |
+      所有数据库查询必须使用参数化查询或 ORM 方法。禁止直接拼接用户输入到 SQL 语句中。
+      违反示例：f"SELECT * FROM users WHERE id = {user_id}"
+      正确做法：cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+      ORM 示例：User.objects.filter(id=user_id)
+    severity: critical
+    tags: [sql, injection, database, parameterized-query]
+
+  - id: SEC-002
+    title: 敏感信息禁止硬编码
+    content: |
+      API Key、密码、Token、数据库连接串等敏感信息禁止硬编码在源代码中。
+      必须通过环境变量、配置中心或密钥管理服务（如 AWS Secrets Manager、HashiCorp Vault）获取。
+      违反示例：api_key = "sk-xxxxxxxxxxxx"
+      正确做法：api_key = os.environ["API_KEY"]
+    severity: critical
+    tags: [secret, hardcode, credential, api-key]
+
+  - id: SEC-003
+    title: 外部输入验证
+    content: |
+      所有外部输入（HTTP 请求参数、文件上传、命令行参数、消息队列消息）必须进行类型检查和边界验证。
+      字符串输入需要长度限制和特殊字符过滤。数值输入需要范围校验。
+      推荐使用 Pydantic、marshmallow 等验证框架进行声明式校验。
+    severity: high
+    tags: [input, validation, boundary, sanitization]
+
+  - id: SEC-004
+    title: XSS 防护
+    content: |
+      所有用户输入在渲染到 HTML 页面前必须进行转义处理。
+      禁止使用 innerHTML、v-html、dangerouslySetInnerHTML 直接渲染未经过滤的用户输入。
+      后端返回的 HTML 内容必须经过白名单过滤（如 bleach、DOMPurify）。
+    severity: critical
+    tags: [xss, html, escape, frontend]
+
+  - id: SEC-005
+    title: 命令注入防护
+    content: |
+      禁止将用户输入直接拼接到 shell 命令中。使用 subprocess 时必须传入列表参数而非字符串。
+      违反示例：os.system(f"ping {user_input}")
+      正确做法：subprocess.run(["ping", "-c", "1", validated_host], shell=False)
+      如必须使用 shell=True，需对输入进行严格白名单校验。
+    severity: critical
+    tags: [command-injection, shell, subprocess, os-system]
+
+  - id: SEC-006
+    title: 认证 Token 安全存储
+    content: |
+      JWT Token 和 Session Token 禁止存储在 localStorage 中（易受 XSS 攻击）。
+      推荐使用 HttpOnly + Secure + SameSite 属性的 Cookie 存储。
+      Token 必须设置合理的过期时间，长期 Token 需要支持刷新机制。
+    severity: high
+    tags: [jwt, session, token, cookie, storage]
+
+  - id: SEC-007
+    title: 密码存储规范
+    content: |
+      用户密码必须使用 bcrypt、argon2 或 scrypt 等慢哈希算法存储。
+      禁止使用 MD5、SHA-1、SHA-256 直接哈希密码（无 salt 或使用快速哈希）。
+      每个密码必须使用独立的随机 salt。
+    severity: critical
+    tags: [password, hash, bcrypt, argon2, salt]
+
+  - id: SEC-008
+    title: HTTPS 强制使用
+    content: |
+      所有对外服务必须使用 HTTPS，禁止 HTTP 明文传输。
+      内部服务间通信如涉及敏感数据也应使用 TLS 加密。
+      API 请求中禁止通过 URL 参数传递敏感信息（会被记录在日志和浏览器历史中）。
+    severity: high
+    tags: [https, tls, encryption, transport]
+
+  - id: SEC-009
+    title: 权限最小化原则
+    content: |
+      服务账号和 API Key 必须遵循最小权限原则，只授予完成任务所需的最小权限集。
+      数据库连接账号禁止使用 root/admin 权限。
+      文件系统操作应限制在指定目录内，防止路径遍历攻击。
+    severity: high
+    tags: [permission, least-privilege, access-control, path-traversal]
+
+  - id: SEC-010
+    title: 日志脱敏
+    content: |
+      日志中禁止记录密码、Token、信用卡号、身份证号等敏感信息。
+      如需记录用于调试，必须进行脱敏处理（如只保留前4后4位）。
+      异常堆栈中的敏感变量值应在日志框架层面过滤。
+    severity: high
+    tags: [logging, sensitive-data, masking, pii]
+
+  - id: SEC-011
+    title: CORS 配置安全
+    content: |
+      禁止将 Access-Control-Allow-Origin 设置为 *（通配符）用于需要认证的接口。
+      CORS 白名单必须明确列出允许的域名，不得使用正则通配。
+      Access-Control-Allow-Credentials 为 true 时，Origin 不能为 *。
+    severity: medium
+    tags: [cors, origin, cross-origin, headers]
+
+  - id: SEC-012
+    title: 文件上传安全
+    content: |
+      文件上传必须校验文件类型（通过 magic bytes 而非仅扩展名）。
+      上传文件大小必须设置上限。存储路径禁止使用用户提供的文件名（防止路径遍历）。
+      上传目录不应具有执行权限。图片类文件建议重新编码以去除潜在恶意内容。
+    severity: high
+    tags: [upload, file, magic-bytes, path-traversal]
+
+  - id: SEC-013
+    title: 速率限制
+    content: |
+      所有对外 API 接口必须配置速率限制（Rate Limiting）。
+      登录接口必须有更严格的限制（如 5次/分钟），并在多次失败后锁定账号或要求验证码。
+      速率限制应基于用户标识而非仅 IP（防止共享 IP 误伤）。
+    severity: medium
+    tags: [rate-limit, throttle, brute-force, login]
+
+  - id: SEC-014
+    title: 依赖安全
+    content: |
+      第三方依赖必须锁定版本号（使用 lock 文件）。
+      定期运行依赖漏洞扫描（如 pip-audit、npm audit、snyk）。
+      禁止引入已知存在高危漏洞且无修复版本的依赖。
+    severity: medium
+    tags: [dependency, vulnerability, supply-chain, lock-file]
+
+  - id: SEC-015
+    title: 错误信息不泄露内部细节
+    content: |
+      面向用户的错误响应禁止包含堆栈跟踪、数据库表名、内部 IP、文件路径等信息。
+      生产环境必须使用通用错误消息，详细错误仅记录到内部日志。
+      API 错误响应应返回标准化的错误码而非原始异常信息。
+    severity: medium
+    tags: [error-handling, information-disclosure, stack-trace]
+
+  - id: SEC-016
+    title: 反序列化安全
+    content: |
+      禁止对不可信数据使用 pickle.loads、yaml.load（无 Loader）、eval、exec。
+      JSON 反序列化后必须进行 schema 校验。
+      如必须使用 YAML，应使用 yaml.safe_load 替代 yaml.load。
+    severity: critical
+    tags: [deserialization, pickle, eval, yaml, rce]
+
+  - id: SEC-017
+    title: 会话管理
+    content: |
+      用户登出后必须在服务端使 Session/Token 失效。
+      敏感操作（修改密码、绑定手机）需要二次认证。
+      并发会话数应有上限，新登录可选择踢出旧会话。
+    severity: high
+    tags: [session, logout, invalidation, concurrent-session]
+
+  - id: SEC-018
+    title: 加密算法选择
+    content: |
+      对称加密推荐 AES-256-GCM，禁止使用 DES、3DES、RC4。
+      非对称加密 RSA 密钥长度不低于 2048 位，推荐使用 ECDSA。
+      哈希摘要禁止使用 MD5、SHA-1（已被证明不安全），推荐 SHA-256 及以上。
+    severity: high
+    tags: [encryption, aes, rsa, hash, algorithm]

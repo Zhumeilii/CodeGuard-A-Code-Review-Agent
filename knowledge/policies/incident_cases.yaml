@@ -1,0 +1,169 @@
+domain: incident
+description: 历史事故案例库 - 记录真实生产事故的根因、影响和防范措施，用于审查时识别类似风险模式
+clauses:
+  - id: INC-001
+    title: 浮点金额计算导致资金损失
+    content: |
+      事故：2023-Q2 订单系统使用 float 计算折扣金额，累计产生 ¥12,847 资金差异。
+      根因：float(99.99) * float(0.85) = 84.9915000000001，截断后每单少收 0.01 元。
+      防范：所有金额计算必须使用 Decimal 或整数（分）运算。参见 PAY-001。
+    severity: critical
+    tags: [float, money, precision, production-incident]
+
+  - id: INC-002
+    title: SQL 注入导致数据泄露
+    content: |
+      事故：2023-Q1 用户搜索接口未做参数化，攻击者通过 UNION 注入获取了 50 万用户邮箱。
+      根因：search_query = f"SELECT * FROM users WHERE name LIKE '%{keyword}%'"
+      防范：所有 SQL 必须参数化。搜索接口额外需要对 LIKE 通配符进行转义。参见 SEC-001。
+    severity: critical
+    tags: [sql-injection, data-breach, user-data, like-injection]
+
+  - id: INC-003
+    title: 未验证支付回调导致虚假充值
+    content: |
+      事故：2023-Q3 攻击者伪造支付宝回调请求，绕过签名验证，虚假充值 ¥230,000。
+      根因：回调处理函数只检查了 trade_status == "TRADE_SUCCESS"，未验证签名。
+      防范：所有支付回调必须先验签再处理业务逻辑。参见 PAY-003。
+    severity: critical
+    tags: [payment-callback, signature-bypass, fake-payment]
+
+  - id: INC-004
+    title: 并发超卖事故
+    content: |
+      事故：2024-Q1 秒杀活动中，100 件商品实际售出 347 件，超卖 247 件。
+      根因：库存扣减使用了 SELECT + UPDATE 非原子操作，高并发下出现竞态条件。
+      防范：库存扣减必须使用原子操作（UPDATE stock SET count = count - 1 WHERE count > 0）
+      或分布式锁。参见 PAY-009。
+    severity: critical
+    tags: [oversell, race-condition, inventory, atomic-operation]
+
+  - id: INC-005
+    title: 日志记录明文密码
+    content: |
+      事故：2023-Q4 安全审计发现登录接口日志中记录了用户明文密码，影响 12 万用户。
+      根因：logger.info(f"Login attempt: user={username}, password={password}")
+      防范：日志框架必须配置敏感字段过滤器，密码字段永远不应出现在日志参数中。参见 SEC-010。
+    severity: critical
+    tags: [password-leak, logging, plaintext, audit]
+
+  - id: INC-006
+    title: 硬编码 API Key 泄露
+    content: |
+      事故：2024-Q1 开发者将 AWS Access Key 硬编码在代码中并推送到公开 GitHub 仓库。
+      攻击者在 15 分钟内利用该 Key 启动了 200 台 EC2 实例挖矿，产生 $8,400 费用。
+      防范：使用 git-secrets 或 pre-commit hook 扫描敏感信息。参见 SEC-002。
+    severity: critical
+    tags: [api-key-leak, github, aws, mining, pre-commit]
+
+  - id: INC-007
+    title: 退款接口无金额上限校验
+    content: |
+      事故：2023-Q3 客服系统退款接口未校验退款金额上限，内部人员利用漏洞退款 ¥89,000。
+      根因：退款接口只校验了订单是否存在，未校验退款金额 <= 实付金额。
+      防范：退款接口必须校验单笔和累计退款金额不超过原订单实付金额。参见 PAY-005。
+    severity: critical
+    tags: [refund-exploit, amount-validation, insider-threat]
+
+  - id: INC-008
+    title: Mock 测试通过但生产迁移失败
+    content: |
+      事故：2024-Q1 数据库迁移上线后，核心查询接口全部 500 错误，持续 45 分钟。
+      根因：测试全部使用 Mock 数据库，未发现新增字段的 NOT NULL 约束与旧数据不兼容。
+      防范：数据库相关测试必须连接真实测试库。迁移脚本必须在包含生产数据样本的环境中验证。参见 TEST-003。
+    severity: high
+    tags: [migration, mock-failure, database, not-null]
+
+  - id: INC-009
+    title: CORS 配置错误导致数据窃取
+    content: |
+      事故：2023-Q2 API 网关 CORS 配置为 Access-Control-Allow-Origin: *，
+      攻击者构造钓鱼页面，利用用户浏览器中的 Cookie 调用 API 窃取用户数据。
+      防范：需要认证的接口禁止使用通配符 Origin。参见 SEC-011。
+    severity: high
+    tags: [cors, data-theft, cookie, phishing]
+
+  - id: INC-010
+    title: 未设置请求超时导致线程池耗尽
+    content: |
+      事故：2024-Q2 下游支付服务响应变慢，调用方未设置超时，线程池被占满，整个服务不可用 2 小时。
+      根因：requests.post(url, json=data) 未设置 timeout 参数，默认无限等待。
+      防范：所有外部 HTTP 调用必须设置 connect_timeout 和 read_timeout。
+      推荐：requests.post(url, json=data, timeout=(3, 10))
+    severity: high
+    tags: [timeout, thread-pool, cascading-failure, circuit-breaker]
+
+  - id: INC-011
+    title: 路径遍历导致任意文件读取
+    content: |
+      事故：2023-Q4 文件下载接口未校验路径参数，攻击者通过 ../../etc/passwd 读取系统文件。
+      根因：file_path = os.path.join(UPLOAD_DIR, request.args["filename"])，未校验最终路径。
+      防范：使用 os.path.realpath 解析后验证路径是否在允许目录内。参见 SEC-009。
+    severity: critical
+    tags: [path-traversal, file-read, directory-escape]
+
+  - id: INC-012
+    title: 缓存穿透导致数据库崩溃
+    content: |
+      事故：2024-Q1 攻击者批量请求不存在的用户 ID，缓存未命中全部打到数据库，DB CPU 100%。
+      根因：缓存策略只缓存存在的数据，不存在的查询每次都穿透到数据库。
+      防范：对不存在的 key 也缓存空值（短 TTL）。使用布隆过滤器预判 key 是否存在。
+    severity: high
+    tags: [cache-penetration, database-crash, bloom-filter, null-cache]
+
+  - id: INC-013
+    title: 定时任务重复执行
+    content: |
+      事故：2023-Q4 结算定时任务在多台服务器上同时执行，导致商户被重复打款 ¥156,000。
+      根因：定时任务未使用分布式锁，多实例部署后每台机器都触发了任务。
+      防范：分布式定时任务必须使用分布式锁（如 Redis SETNX）或调度框架（如 Celery Beat 单点）。
+    severity: critical
+    tags: [cron, duplicate-execution, distributed-lock, settlement]
+
+  - id: INC-014
+    title: 异常吞没导致静默失败
+    content: |
+      事故：2024-Q2 订单状态更新失败被 except: pass 吞没，3000 笔订单状态不一致，用户投诉。
+      根因：try: update_order_status() except: pass，异常被完全忽略。
+      防范：禁止使用裸 except 或 except: pass。异常必须记录日志或向上传播。
+      最小处理：except Exception as e: logger.error(f"Failed: {e}", exc_info=True)
+    severity: high
+    tags: [exception-swallow, silent-failure, bare-except, error-handling]
+
+  - id: INC-015
+    title: 未限制文件上传大小导致磁盘撑满
+    content: |
+      事故：2023-Q3 用户上传 4GB 视频文件，服务器磁盘被撑满，所有服务不可用。
+      根因：文件上传接口未设置大小限制，Nginx 和应用层都未配置 max_body_size。
+      防范：Nginx 配置 client_max_body_size，应用层校验 Content-Length，流式读取时检查累计大小。参见 SEC-012。
+    severity: high
+    tags: [file-upload, disk-full, size-limit, dos]
+
+  - id: INC-016
+    title: 时区处理错误导致订单丢失
+    content: |
+      事故：2024-Q1 跨时区用户的订单查询丢失，原因是服务器使用本地时间而非 UTC 存储。
+      根因：created_at = datetime.now() 而非 datetime.utcnow() 或 datetime.now(timezone.utc)。
+      防范：所有时间戳必须使用 UTC 存储，展示时根据用户时区转换。数据库字段使用 TIMESTAMP WITH TIME ZONE。
+    severity: medium
+    tags: [timezone, utc, datetime, data-loss]
+
+  - id: INC-017
+    title: 配置热更新未验证导致全站宕机
+    content: |
+      事故：2024-Q2 配置中心推送了格式错误的 JSON 配置，所有服务实例解析失败后崩溃重启。
+      根因：配置更新回调直接 json.loads 并应用，未做格式校验和灰度验证。
+      防范：配置更新必须先校验格式和业务规则，校验失败应保持旧配置。
+      推荐：先在一台实例验证，确认无异常后再全量推送。
+    severity: high
+    tags: [config, hot-reload, validation, graceful-degradation]
+
+  - id: INC-018
+    title: 批量操作无限制导致 OOM
+    content: |
+      事故：2023-Q4 管理后台导出全量用户数据（200 万条），一次性加载到内存导致 OOM 崩溃。
+      根因：users = User.objects.all().values() 一次性查询全部数据。
+      防范：批量操作必须分页处理。导出使用流式写入（StreamingHttpResponse）。
+      查询大量数据使用 iterator() 或 chunk 分批处理。
+    severity: high
+    tags: [oom, batch, pagination, streaming, memory]

@@ -1,0 +1,137 @@
+domain: testing
+description: 测试策略规范 - 覆盖单元测试、集成测试、E2E 测试、测试覆盖率、Mock 使用等要求
+clauses:
+  - id: TEST-001
+    title: 单元测试覆盖率要求
+    content: |
+      核心业务逻辑（支付、权限、数据处理）的单元测试行覆盖率不低于 80%。
+      新增代码必须附带对应的单元测试，PR 中无测试的业务代码变更不予合并。
+      覆盖率统计应排除配置文件、迁移脚本、第三方生成代码。
+    severity: medium
+    tags: [coverage, unit-test, business-logic]
+
+  - id: TEST-002
+    title: 测试独立性
+    content: |
+      每个测试用例必须独立运行，不依赖其他测试的执行顺序或副作用。
+      测试间禁止共享可变状态（如全局变量、数据库中的测试数据）。
+      使用 setUp/tearDown 或 fixture 确保每个测试从干净状态开始。
+    severity: high
+    tags: [isolation, independent, fixture, setup-teardown]
+
+  - id: TEST-003
+    title: 数据库测试使用真实连接
+    content: |
+      涉及数据库操作的集成测试必须连接真实数据库（测试库），不得仅使用 Mock。
+      原因：Mock 无法验证 SQL 语法正确性、迁移兼容性、约束冲突等问题。
+      测试数据库应使用与生产相同的数据库引擎（禁止用 SQLite 替代 PostgreSQL 测试）。
+    severity: high
+    tags: [database, integration-test, real-connection, no-mock]
+
+  - id: TEST-004
+    title: 外部服务 Mock 规范
+    content: |
+      对第三方 API（支付平台、短信服务、邮件服务）的调用在单元测试中应使用 Mock。
+      Mock 的响应数据必须基于真实 API 文档，包含正常响应和异常响应两种场景。
+      集成测试环境应使用第三方提供的沙箱环境而非 Mock。
+    severity: medium
+    tags: [mock, external-api, sandbox, third-party]
+
+  - id: TEST-005
+    title: 边界条件测试
+    content: |
+      所有接受数值输入的函数必须测试边界条件：零值、负数、最大值、溢出。
+      字符串处理必须测试：空字符串、超长字符串、特殊字符、Unicode。
+      集合操作必须测试：空集合、单元素、大量元素。
+    severity: high
+    tags: [boundary, edge-case, zero, overflow, empty]
+
+  - id: TEST-006
+    title: 异常路径测试
+    content: |
+      除正常流程外，必须测试异常路径：网络超时、数据库连接失败、文件不存在、权限不足。
+      异常测试应验证：错误是否被正确捕获、错误信息是否合理、资源是否被正确释放。
+      使用 pytest.raises 或 assertRaises 明确断言预期异常类型。
+    severity: high
+    tags: [exception, error-path, timeout, resource-cleanup]
+
+  - id: TEST-007
+    title: 测试命名规范
+    content: |
+      测试函数名必须清晰描述测试场景，格式：test_<被测功能>_<场景>_<预期结果>。
+      示例：test_login_with_expired_token_returns_401
+      禁止使用 test_1、test_case_a 等无意义命名。
+    severity: low
+    tags: [naming, readability, convention]
+
+  - id: TEST-008
+    title: 测试数据管理
+    content: |
+      测试数据应使用 Factory 模式或 Fixture 生成，禁止在测试代码中硬编码大量测试数据。
+      敏感测试数据（如真实用户信息）禁止提交到代码仓库。
+      测试数据文件应与测试代码放在同一目录下的 fixtures/ 或 testdata/ 子目录中。
+    severity: medium
+    tags: [test-data, factory, fixture, sensitive-data]
+
+  - id: TEST-009
+    title: 并发安全测试
+    content: |
+      涉及共享资源（数据库记录、缓存、文件）的操作必须编写并发测试。
+      使用多线程/多协程模拟并发场景，验证是否存在竞态条件。
+      支付、库存扣减等关键操作必须通过并发测试验证幂等性。
+    severity: high
+    tags: [concurrency, race-condition, thread-safety, stress-test]
+
+  - id: TEST-010
+    title: 性能基准测试
+    content: |
+      核心接口（登录、支付、查询）必须建立性能基准（benchmark）。
+      性能测试应在 CI 中定期运行，响应时间超过基准 20% 时触发告警。
+      基准数据应记录：P50、P95、P99 延迟和吞吐量。
+    severity: medium
+    tags: [benchmark, performance, latency, throughput]
+
+  - id: TEST-011
+    title: 回归测试要求
+    content: |
+      每个 bug fix 必须附带回归测试用例，确保相同问题不会再次出现。
+      回归测试应直接复现 bug 的触发条件，而非间接验证。
+      回归测试的注释中应引用对应的 issue/ticket 编号。
+    severity: medium
+    tags: [regression, bug-fix, reproduce]
+
+  - id: TEST-012
+    title: API 契约测试
+    content: |
+      微服务间的 API 调用必须编写契约测试（Contract Test）。
+      契约测试验证：请求格式、响应格式、状态码、错误码是否符合约定。
+      API 变更时，契约测试应先于代码变更更新，确保向后兼容。
+    severity: medium
+    tags: [contract-test, api, microservice, compatibility]
+
+  - id: TEST-013
+    title: 测试环境一致性
+    content: |
+      CI 测试环境必须与生产环境保持一致（操作系统、运行时版本、依赖版本）。
+      使用 Docker 容器化测试环境，确保可复现性。
+      禁止在测试中使用 skip/xfail 跳过因环境差异导致的失败（应修复环境问题）。
+    severity: medium
+    tags: [ci, environment, docker, reproducibility]
+
+  - id: TEST-014
+    title: 测试执行时间限制
+    content: |
+      单个单元测试执行时间不超过 1 秒，超过应标记为集成测试。
+      整个测试套件执行时间不超过 10 分钟（超过应拆分或并行化）。
+      使用 pytest-timeout 等工具强制超时，防止死循环阻塞 CI。
+    severity: low
+    tags: [timeout, performance, ci-speed]
+
+  - id: TEST-015
+    title: 安全测试集成
+    content: |
+      CI 流水线必须包含静态安全扫描（SAST）步骤。
+      依赖漏洞扫描必须在每次构建时运行。
+      高危漏洞发现后必须阻断流水线，禁止带漏洞部署。
+    severity: high
+    tags: [sast, security-scan, ci-pipeline, vulnerability]
